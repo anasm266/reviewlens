@@ -1,6 +1,6 @@
 import { chatSystemPrompt, gatherPrompt, summaryPrompt, SUMMARY_USER_MESSAGE } from '../lib/prompts.js';
 
-const WORKER_URL = 'https://amazon-review-proxy.kingzcopz266.workers.dev';
+const WORKER_URL = 'https://your-worker-name.your-subdomain.workers.dev'; // replace with your deployed Worker URL
 const POLL_INTERVAL = 500;
 const POLL_TIMEOUT  = 15000;
 
