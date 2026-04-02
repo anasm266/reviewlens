@@ -8,6 +8,9 @@ package-lock.json
 .dev.vars
 *.secret
 
+# Extension config (contains live Worker URL — copy from config.example.js)
+extension/sidebar/config.js
+
 # Cloudflare / Wrangler
 .wrangler/
 dist/

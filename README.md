@@ -146,11 +146,17 @@ Copy the deployed worker URL (e.g. `https://amazon-review-proxy.yourname.workers
 
 ### 2 — Configure the extension
 
-Open `extension/sidebar/panel.js` and update line 3:
+```bash
+cp extension/sidebar/config.example.js extension/sidebar/config.js
+```
+
+Then edit `config.js` and paste your Worker URL:
 
 ```js
-const WORKER_URL = 'https://your-worker-url.workers.dev';
+export const WORKER_URL = 'https://your-worker-name.your-subdomain.workers.dev';
 ```
+
+`config.js` is gitignored — your live URL stays off GitHub.
 
 ### 3 — Load the extension
 
