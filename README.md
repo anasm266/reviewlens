@@ -13,11 +13,14 @@
 
 Open any Amazon product page. ReviewLens injects a sidebar that:
 
-- **Auto-scrapes** up to 1 000 reviews in the background (no clicking, no waiting)
+- **Auto-scrapes** up to 1 000 reviews in the background — no clicking, no waiting
 - **Shows live stats** — overall rating, star breakdown, date range — the moment page 1 loads
+- **Caches reviews globally** — Cloudflare KV stores results for 14 days; returning visitors and other users get instant results with zero scraping
 - **Generates an AI summary** of the full review corpus with a single click
 - **Answers natural-language questions** grounded in real review text, with clickable links to the exact reviews it cites
 - **Handles follow-ups** — ask "give me links to that" or "what about the 1-star ones?" and it knows what you mean
+- **Works on 21 Amazon storefronts** — US, UK, CA, DE, FR, JP, SA, AE, and more
+- **Arabic-aware search** — automatically includes Arabic keywords when reviewing regional storefronts
 
 ---
 
@@ -34,14 +37,19 @@ Open any Amazon product page. ReviewLens injects a sidebar that:
 ```
 Amazon Product Page
        │
-       ├─ content/scraper.js        Fetches /product-reviews/ pages with 300ms
-       │                            delay, auto-paginates up to 100 pages (1 000
-       │                            reviews), saves to chrome.storage.local
+       ├─ content/scraper.js        Checks local cache first (14-day TTL).
+       │                            If stale/missing: fetches /product-reviews/
+       │                            pages with 300ms delay, auto-paginates up
+       │                            to 100 pages (1 000 reviews), saves to
+       │                            chrome.storage.local.
        │
        ├─ content/sidebar.js        Injects the panel iframe into the page
        │
-       └─ sidebar/panel.js          Main UI — polls storage, renders stats,
-                                    drives all AI calls via the proxy
+       └─ sidebar/panel.js          Main UI — on init, races two sources:
+                                    1. Storage poll (waits for scraper page 1)
+                                    2. GET /reviews from Cloudflare KV
+                                    Whichever resolves first wins → instant render.
+                                    After scrape completes → POST /reviews to KV.
 
 AI Pipeline (two-phase RAG)
        │
@@ -49,7 +57,8 @@ AI Pipeline (two-phase RAG)
        │   Sends a compact snapshot (one line per review: rating + title) to
        │   gemini-2.5-flash with tool_config mode:ANY, forcing it to call
        │   search_reviews({query, max_results}). The tool runs locally with
-       │   prefix/stem keyword matching — no extra API call.
+       │   prefix/stem keyword matching — no extra API call. Includes Arabic
+       │   keywords automatically for regional storefronts.
        │
        └─ Phase 2 — Streaming answer
            Full text of matched reviews (+ permalink URLs) is passed as context
@@ -58,8 +67,11 @@ AI Pipeline (two-phase RAG)
 
 Proxy (Cloudflare Worker)
        │
-       ├─ /chat   Routes to generateContent (tool calls) or streamGenerateContent
-       │          (SSE answers) based on whether the request includes tools
+       ├─ /chat      Routes to generateContent (tool calls) or streamGenerateContent
+       │             (SSE answers) based on whether the request includes tools
+       │
+       ├─ /reviews   GET  → KV lookup by ASIN + storefront (14-day cache)
+       │             POST → store scraped reviews in KV after completion
        │
        └─ Rate limiting via Upstash Redis — per-IP daily caps
 ```
@@ -71,12 +83,13 @@ Proxy (Cloudflare Worker)
 | Layer | Technology |
 |---|---|
 | Extension | Chrome MV3, Manifest V3 service worker |
-| Scraping | Fetch API + DOMParser, 300 ms page delay |
+| Scraping | Fetch API + DOMParser, 300 ms page delay, 21 storefronts |
+| Cache | Cloudflare KV — shared across all users, 14-day TTL |
 | AI — tool phase | Gemini 2.5 Flash, function calling (`mode: ANY`) |
 | AI — answer phase | Gemini 2.5 Flash-Lite, streaming SSE |
-| Proxy | Cloudflare Workers (Edge, zero cold-start) |
+| Proxy | Cloudflare Workers (edge, zero cold-start) |
 | Rate limiting | Upstash Redis (serverless Redis) |
-| Storage | `chrome.storage.local` (persists across sidebar opens) |
+| Storage | `chrome.storage.local` (local session cache) |
 | UI | Vanilla JS, custom dark design system, CSS animations |
 
 ---
@@ -91,6 +104,9 @@ The compact snapshot (one line per review) gives the LLM full distribution aware
 
 **Conversation continuity without chat history in API calls**
 `mode: ANY` rejects plain-text model turns in the message array. Instead, the last 4 conversation turns are injected as text inside the system prompt so the LLM understands follow-up questions without breaking the tool-calling contract.
+
+**Two-tier caching (local + shared KV)**
+`chrome.storage.local` handles revisits on the same device — the scraper bails immediately if data is under 14 days old. Cloudflare KV handles the cross-user case: the panel races a KV fetch against the scraper's page-1 poll. If KV wins, the panel renders in under a second with zero Amazon requests. After any full scrape, results are silently uploaded to KV for future visitors.
 
 **Auto-pagination with live progress**
 The scraper runs entirely inside the content script — no background service worker round-trips for each page. `chrome.storage.onChanged` lets the sidebar react to each batch of new reviews as they arrive, updating the count chip and progress pill in real time.
@@ -107,17 +123,19 @@ reviewlens/
 │   ├── background/
 │   │   └── service-worker.js Tab registry for cross-context messaging
 │   ├── content/
-│   │   ├── scraper.js        Review scraper + auto-paginator
+│   │   ├── scraper.js        Review scraper + auto-paginator + local cache check
 │   │   └── sidebar.js        Iframe injector
 │   ├── lib/
 │   │   └── prompts.js        All LLM system prompts
 │   └── sidebar/
 │       ├── panel.html        Sidebar shell
 │       ├── panel.css         Dark design system
-│       └── panel.js          UI logic + AI pipeline orchestration
+│       ├── panel.js          UI logic + AI pipeline + KV cache orchestration
+│       ├── config.js         Worker URL — gitignored, copy from config.example.js
+│       └── config.example.js Placeholder for repo consumers
 └── proxy/
-    ├── worker.js             Cloudflare Worker — Gemini proxy + rate limiting
-    └── wrangler.toml         Cloudflare deployment config
+    ├── worker.js             Cloudflare Worker — Gemini proxy + KV cache + rate limiting
+    └── wrangler.toml         Cloudflare deployment config (KV binding included)
 ```
 
 ---
@@ -136,6 +154,12 @@ reviewlens/
 ```bash
 cd proxy
 npm install -g wrangler
+wrangler login
+
+# Create the KV namespace for review caching
+wrangler kv namespace create REVIEWS_KV
+# → copy the returned `id` into wrangler.toml under [[kv_namespaces]]
+
 wrangler secret put GEMINI_API_KEY        # your Gemini key
 wrangler secret put UPSTASH_REDIS_REST_URL
 wrangler secret put UPSTASH_REDIS_REST_TOKEN
@@ -150,7 +174,7 @@ Copy the deployed worker URL (e.g. `https://amazon-review-proxy.yourname.workers
 cp extension/sidebar/config.example.js extension/sidebar/config.js
 ```
 
-Then edit `config.js` and paste your Worker URL:
+Edit `config.js` and paste your Worker URL:
 
 ```js
 export const WORKER_URL = 'https://your-worker-name.your-subdomain.workers.dev';
@@ -173,13 +197,16 @@ Navigate to any Amazon product page (e.g. `amazon.com/dp/B08N5WRWNW`). The Revie
 
 ## Features
 
+- **Two-tier cache** — local 14-day freshness check skips scraping on revisits; Cloudflare KV serves any previously-scraped product instantly to any user
 - **Live scraping progress** — "Loading reviews: 340 of ~1 000" pill updates in real time
 - **Shimmer skeleton** — layout preview while page 1 loads
 - **AI Summary** — streams a structured breakdown of the full review corpus
 - **Smart suggestions** — auto-generated questions based on keywords detected in reviews
 - **Follow-up detection** — short/contextual questions reuse the previous search context (no redundant API calls)
 - **Rating filter** — narrow Q&A to 1–2★ or 4–5★ reviews
-- **Clickable review links** — every cited review links to its Amazon permalink
+- **Clickable review links** — every cited review links to its Amazon permalink (each linked once per response)
+- **21 storefronts** — amazon.com, .co.uk, .ca, .de, .fr, .it, .es, .co.jp, .in, .com.au, .com.br, .com.mx, .nl, .se, .sg, .sa, .ae, .com.tr, .pl, .eg, .be
+- **Arabic-aware Q&A** — LLM includes Arabic search terms when the review corpus contains Arabic text
 - **Dark UI** — custom design system with gradient accent, smooth animations
 
 ---
