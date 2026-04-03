@@ -305,6 +305,7 @@ main {
   color: var(--text-3);
   margin-left: auto;
   letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 #breakdown { display: flex; flex-direction: column; gap: 4px; }

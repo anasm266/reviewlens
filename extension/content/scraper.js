@@ -69,8 +69,15 @@
       save([], { status: 'captcha', captcha: true }); return;
     }
 
+    // Prefer actual pagination from the reviews page (only counts text reviews).
+    // Fall back to product-page totalCount (includes rating-only entries, over-estimates).
+    const pageNums = [...firstPage.querySelectorAll('.a-pagination a')]
+      .map(a => parseInt(a.textContent.trim()))
+      .filter(n => !isNaN(n) && n > 0);
+    const detectedPages = pageNums.length > 0 ? Math.max(...pageNums) : null;
+
     const rawCount = parseInt((stats.totalCount || '0').replace(/[^0-9]/g, '')) || 0;
-    totalPages = Math.min(100, Math.max(1, Math.ceil(rawCount / 10))); // cap 1000 reviews
+    totalPages = Math.min(100, detectedPages ?? Math.max(1, Math.ceil(rawCount / 10)));
 
     allReviews = parseReviews(firstPage);
     console.log('[ReviewLens scraper] page 1:', allReviews.length, 'reviews | totalPages:', totalPages);
