@@ -80,6 +80,7 @@ async function init() {
 
 function applyData(data, isUpdate = false) {
   const incoming = data.reviews || [];
+  if (data.origin) amazonOrigin = data.origin;
 
   // Only re-render stats on first load or if review count changed
   if (!isUpdate || incoming.length !== reviews.length) {
@@ -147,7 +148,6 @@ function renderAll(stats) {
   if (!stats) return;
 
   productName = stats.productTitle || '';
-  if (data.origin) amazonOrigin = data.origin;
   productTitle.textContent = productName;
 
   const count = reviews.length;
