@@ -38,7 +38,7 @@
 
   const fetchPage = async (pageNum) => {
     try {
-      const url = `${origin}/product-reviews/${asin}?reviewerType=all_reviews&sortBy=recent&pageNumber=${pageNum}`;
+      const url = `${origin}/product-reviews/${asin}?reviewerType=all_reviews&sortBy=helpful&pageNumber=${pageNum}`;
       const res = await fetch(url);
       if (!res.ok) return null;
       return new DOMParser().parseFromString(await res.text(), 'text/html');
