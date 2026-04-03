@@ -1,6 +1,6 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 
@@ -129,6 +129,27 @@ async function handleChat(request, env) {
   });
 }
 
+async function handleReviewsGet(request, env) {
+  const { searchParams } = new URL(request.url);
+  const asin = searchParams.get('asin');
+  const storefront = searchParams.get('storefront');
+  if (!asin || !storefront) return json({ error: 'Missing params' }, 400);
+  const cached = await env.REVIEWS_KV.get(`reviews:${asin}:${storefront}`);
+  if (!cached) return json({ error: 'Not found' }, 404);
+  return new Response(cached, { headers: { ...CORS, 'Content-Type': 'application/json' } });
+}
+
+async function handleReviewsPost(request, env) {
+  const { asin, storefront, data } = await request.json();
+  if (!asin || !storefront || !data) return json({ error: 'Missing fields' }, 400);
+  await env.REVIEWS_KV.put(
+    `reviews:${asin}:${storefront}`,
+    JSON.stringify(data),
+    { expirationTtl: 14 * 24 * 60 * 60 }
+  );
+  return json({ ok: true });
+}
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -139,9 +160,16 @@ function json(data, status = 200) {
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS });
-    if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: CORS });
 
     const path = new URL(request.url).pathname;
+
+    if (path === '/reviews') {
+      if (request.method === 'GET')  return handleReviewsGet(request, env);
+      if (request.method === 'POST') return handleReviewsPost(request, env);
+    }
+
+    if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: CORS });
+
     if (path === '/embed') return handleEmbed(request, env);
     if (path === '/chat') return handleChat(request, env);
     return new Response('Not found', { status: 404, headers: CORS });

@@ -3,6 +3,16 @@
   console.log('[ReviewLens scraper] asin:', asin);
   if (!asin) return;
 
+  // Skip scraping if local data is <14 days old and complete
+  const CACHE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+  const stored = await new Promise(res => chrome.storage.local.get(`rl_scrape_${asin}`, d => res(d)));
+  const existing = stored[`rl_scrape_${asin}`];
+  if (existing?.status === 'complete' && (Date.now() - (existing.scrapedAt || 0)) < CACHE_TTL_MS) {
+    console.log('[ReviewLens scraper] fresh local cache found — skipping scrape');
+    chrome.runtime.sendMessage({ type: 'REGISTER_TAB', asin });
+    return;
+  }
+
   const stats = {
     productTitle: document.querySelector('#productTitle')?.innerText?.trim()
       || document.title.split(':')[0].trim(),

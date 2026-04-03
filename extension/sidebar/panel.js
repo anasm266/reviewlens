@@ -88,6 +88,16 @@ function applyData(data, isUpdate = false) {
     updateCountChip(data);
     updateLoadProgress(data);
 
+    // Upload to shared KV cache when scrape is fully complete
+    if (data.status === 'complete' && !data.fromCloud) {
+      const storefront = amazonOrigin.replace(/^https:\/\/(www\.)?/, '');
+      fetch(`${WORKER_URL}/reviews`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ asin, storefront, data }),
+      }).catch(() => {}); // fire-and-forget
+    }
+
     refreshDateRange();   // always recompute from the full reviews array
 
     if (!isUpdate) {
@@ -125,11 +135,24 @@ function updateLoadProgress(data) {
   }
 }
 
-// Poll chrome.storage.local until scraper writes first-page data (or timeout)
+// Poll chrome.storage.local until scraper writes first-page data (or timeout).
+// Simultaneously fires a KV cache lookup — if it wins, writes to storage so
+// the poll loop resolves immediately on the next tick.
 function pollForData() {
   return new Promise((resolve) => {
     const key = `rl_scrape_${asin}`;
     const start = Date.now();
+
+    // Race: check KV in parallel — write to storage if hit
+    const storefront = amazonOrigin.replace(/^https:\/\/(www\.)?/, '');
+    fetch(`${WORKER_URL}/reviews?asin=${encodeURIComponent(asin)}&storefront=${encodeURIComponent(storefront)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(kvData => {
+        if (!kvData?.reviews) return;
+        chrome.storage.local.set({ [key]: { ...kvData, fromCloud: true } });
+      })
+      .catch(() => {});
+
     const check = () => {
       chrome.storage.local.get(key, (items) => {
         if (chrome.runtime.lastError) { resolve(null); return; }
