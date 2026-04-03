@@ -6,11 +6,12 @@ const POLL_TIMEOUT  = 15000;
 // ── State ────────────────────────────────────────────────────────────────────
 let asin = null;
 let reviews = [];
-let productName = '';     // full product title, passed to every AI prompt
+let productName = '';
+let amazonOrigin = 'https://www.amazon.com'; // updated from stored data on load
 let chatHistory = [];
 let ratingFilter = 'all';
 let isChatting = false;
-let lastSearchedReviews = []; // cached context for follow-up questions
+let lastSearchedReviews = [];
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -146,6 +147,7 @@ function renderAll(stats) {
   if (!stats) return;
 
   productName = stats.productTitle || '';
+  if (data.origin) amazonOrigin = data.origin;
   productTitle.textContent = productName;
 
   const count = reviews.length;
@@ -459,7 +461,7 @@ async function handleQuestion(question) {
                 total_reviews: reviews.length,
                 reviews: found.map(r => {
                   const url = r.reviewId
-                    ? `https://www.amazon.com/gp/customer-reviews/${r.reviewId}/`
+                    ? `${amazonOrigin}/gp/customer-reviews/${r.reviewId}/`
                     : null;
                   return (
                     `★${r.rating} ${r.verified ? '(verified)' : ''} | ${r.date}` +
@@ -497,7 +499,7 @@ async function handleQuestion(question) {
     const detailedContext = uniqueReviews
       .map(r => {
         const url = r.reviewId
-          ? `https://www.amazon.com/gp/customer-reviews/${r.reviewId}/`
+          ? `${amazonOrigin}/gp/customer-reviews/${r.reviewId}/`
           : null;
         return (
           `★${r.rating} ${r.verified ? '(verified)' : ''} | ${r.date}` +

@@ -15,10 +15,12 @@
 
   let allReviews = [];
 
+  const origin = window.location.origin; // e.g. https://www.amazon.co.uk
+
   const save = (reviews, extra = {}) => {
     allReviews = reviews;
     chrome.storage.local.set({
-      [`rl_scrape_${asin}`]: { asin, reviews, stats, scrapedAt: Date.now(), ...extra },
+      [`rl_scrape_${asin}`]: { asin, reviews, stats, origin, scrapedAt: Date.now(), ...extra },
     }, () => {
       if (chrome.runtime.lastError) console.error('[ReviewLens scraper] save error:', chrome.runtime.lastError);
     });
@@ -26,7 +28,7 @@
 
   const fetchPage = async (pageNum) => {
     try {
-      const url = `https://www.amazon.com/product-reviews/${asin}?reviewerType=all_reviews&sortBy=recent&pageNumber=${pageNum}`;
+      const url = `${origin}/product-reviews/${asin}?reviewerType=all_reviews&sortBy=recent&pageNumber=${pageNum}`;
       const res = await fetch(url);
       if (!res.ok) return null;
       return new DOMParser().parseFromString(await res.text(), 'text/html');
