@@ -62,7 +62,7 @@ async function init() {
   // Wait for at least page 1 of reviews
   const data = await pollForData();
   if (!data) { showError('Could not load reviews. Try refreshing the page.'); return; }
-  if (data.captcha) { showError('Amazon showed a CAPTCHA. Please refresh the product page and try again.'); return; }
+  if (data.captcha) { showError('Amazon is blocking access to reviews — this usually happens when you\'re not signed in. Sign into Amazon and refresh the page.'); return; }
 
   applyData(data);
   showMain();

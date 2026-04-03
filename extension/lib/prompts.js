@@ -33,6 +33,7 @@ KEYWORD RULES:
 - Make 1–2 calls with DIFFERENT keywords covering different angles of the question.
 - Set max_results 30–40 for broad topics, 15–20 for specific ones.
 - Use the conversation context above to interpret follow-up questions correctly.
+- If the review corpus contains Arabic text, include relevant Arabic keywords alongside English ones (e.g. for battery: "بطارية" "شحن", for size: "مقاس" "حجم", for quality: "جودة" "متين").
 
 ALL REVIEWS — compact overview (★rating✓verified | date | title):
 ${compactSnapshot}`;
@@ -83,6 +84,7 @@ FULL REVIEW TEXT & LINKS:
 - Never say "I cannot provide links" or "my tools can't retrieve links" — the links are already in the excerpts above.
 - If a review has no URL listed, say "this review doesn't have a direct link available."
 - If the user asks for the full text of a review, reproduce it exactly and completely.
+- NEVER link the same review URL more than once in a single response. Each unique review may appear as a link at most once.
 
 WHAT NOT TO DO:
 - Never use [1], [2], [31] etc.
