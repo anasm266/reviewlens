@@ -87,6 +87,15 @@
       await new Promise(r => setTimeout(r, 300));
       const page = await fetchPage(p);
       const newReviews = parseReviews(page);
+
+      // Empty page means we've exhausted all text reviews — stop early.
+      // (totalCount includes rating-only entries with no text, so it
+      // over-estimates the number of pages with actual review content.)
+      if (newReviews.length === 0) {
+        save(allReviews, { status: 'complete', pagesFetched: p, totalPages: p });
+        break;
+      }
+
       allReviews = allReviews.concat(newReviews);
       save(allReviews, {
         status: p < totalPages ? 'loading' : 'complete',
